@@ -1,3 +1,5 @@
+server:
+  port: 8899
 spring:
   application:
     name: example-app
@@ -7,10 +9,10 @@ spring:
     #    password:
     timeout: 60000
 
-server:
-  port: 8899
-  
 halo:
   cache:
     redis:
-      enable: true
+      enable: true #是否开启缓存
+      expire-after-access: 60 #访问缓存后多少秒过期
+      expire-after-write: 60 #写入缓存后多少秒过期
+      refresh-after-write: 30 #更新缓存后多少秒刷新
