@@ -43,6 +43,9 @@ public class CachePutAspect {
 	public Object around(ProceedingJoinPoint point) throws Throwable {
 
 		CachePut cachePut = springCacheUtils.getAnnotation(point, CachePut.class);
+		if (!springCacheUtils.checkCondition(cachePut.condition(), point)) {
+			return point.proceed();
+		}
 		String cacheKey = springCacheUtils.generateCacheKey(cachePut.nameSpace(), cachePut.name(), point);
 
 		RLock rLock = redissonClient.getLock(cacheKey + ":lock");
@@ -55,7 +58,7 @@ public class CachePutAspect {
 		} finally {
 			rLock.unlock();
 		}
-		
+
 		return value;
 	}
 

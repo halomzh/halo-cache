@@ -10,7 +10,6 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
-import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -47,9 +45,27 @@ public class CacheEvictAspect {
 	@Around("cacheEvictPointcut()")
 	public Object around(ProceedingJoinPoint point) throws Throwable {
 
-		Object value = point.proceed();
+		Object value;
 
 		CacheEvict cacheEvict = springCacheUtils.getAnnotation(point, CacheEvict.class);
+		if (!springCacheUtils.checkCondition(cacheEvict.condition(), point)) {
+			return point.proceed();
+		}
+		if (cacheEvict.beforeInvocation()) {
+			delete(cacheEvict, point);
+			value = point.proceed();
+		} else {
+			value = point.proceed();
+			delete(cacheEvict, point);
+		}
+
+		return value;
+	}
+
+	private void delete(CacheEvict cacheEvict, ProceedingJoinPoint point) {
+		if (cacheEvict.allEntries()) {
+			redisCacheHandler.evictCache("nameSpace:" + cacheEvict.nameSpace() + ":*", true);
+		}
 		List<String> cacheKeyList = Arrays.stream(cacheEvict.names()).map(name -> {
 			try {
 				return springCacheUtils.generateCacheKey(cacheEvict.nameSpace(), name, point);
@@ -59,18 +75,8 @@ public class CacheEvictAspect {
 			return null;
 		}).filter(StringUtils::isNoneBlank).collect(Collectors.toList());
 
-		for (String cacheKey : cacheKeyList) {
-			RLock rLock = redissonClient.getLock(cacheKey + ":lock");
-			try {
-				rLock.lock(5 * 60, TimeUnit.SECONDS);
-				redisCacheHandler.evictCache(cacheKey);
-			} finally {
-				rLock.unlock();
-			}
+		cacheKeyList.forEach(cacheKey -> redisCacheHandler.evictCache(cacheKey, false));
 
-		}
-
-		return value;
 	}
 
 }

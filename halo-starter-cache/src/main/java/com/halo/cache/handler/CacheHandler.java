@@ -27,9 +27,10 @@ public interface CacheHandler {
 	/**
 	 * 驱逐缓存
 	 *
-	 * @param cacheKey key
+	 * @param cacheKey   key
+	 * @param allEntries 全部删除
 	 */
-	void evictCache(String cacheKey);
+	void evictCache(String cacheKey, Boolean allEntries);
 
 	/**
 	 * 新增缓存

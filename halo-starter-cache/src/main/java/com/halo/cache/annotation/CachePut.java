@@ -1,8 +1,5 @@
 package com.halo.cache.annotation;
 
-import com.halo.cache.constant.CacheConstant;
-import com.halo.cache.constant.CacheLevelEnum;
-
 import java.lang.annotation.*;
 
 /**
@@ -22,16 +19,11 @@ public @interface CachePut {
 	/**
 	 * 缓存名称
 	 */
-	String name() default CacheConstant.UNDEFINED_STRING;
-
-	/**
-	 * 缓存级别
-	 */
-	CacheLevelEnum cacheLevel() default CacheLevelEnum.REMOTE;
+	String name() default "";
 
 	/**
 	 * 条件
 	 */
-	String condition() default CacheConstant.UNDEFINED_STRING;
+	String condition() default "";
 
 }

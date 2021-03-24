@@ -1,7 +1,7 @@
 package com.halo.cache.handler.impl;
 
-import com.halo.cache.constant.CacheLevelEnum;
 import com.halo.cache.config.redis.properties.RedisCacheProperties;
+import com.halo.cache.constant.CacheLevelEnum;
 import com.halo.cache.handler.CacheHandler;
 import com.halo.cache.holder.CacheHolder;
 import com.halo.cache.holder.CacheHolderStatusEnum;
@@ -56,7 +56,10 @@ public class RedisCacheHandler implements CacheHandler {
 	}
 
 	@Override
-	public void evictCache(String cacheKey) {
+	public void evictCache(String cacheKey, Boolean allEntries) {
+		if (allEntries) {
+			redissonClient.getKeys().deleteByPattern(cacheKey);
+		}
 		RBucket<CacheHolder> cacheHolderRBucket = redissonClient.getBucket(cacheKey);
 		cacheHolderRBucket.delete();
 	}

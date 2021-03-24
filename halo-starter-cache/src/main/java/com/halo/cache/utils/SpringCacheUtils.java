@@ -23,8 +23,6 @@ import org.springframework.util.ObjectUtils;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * @author shoufeng
@@ -58,6 +56,18 @@ public class SpringCacheUtils implements ApplicationContextAware, BeanPostProces
 	 */
 	private DefaultParameterNameDiscoverer nameDiscoverer = new DefaultParameterNameDiscoverer();
 
+
+	@SneakyThrows
+	public boolean checkCondition(String conditionExpress, ProceedingJoinPoint point) {
+		if (StringUtils.isBlank(conditionExpress)) {
+			return true;
+		}
+		Expression expression = parser.parseExpression(conditionExpress);
+		EvaluationContext evaluationContext = getEvaluationContext(point);
+
+		return (Boolean) expression.getValue(evaluationContext);
+	}
+
 	public static String generateMethodKey(String beanName, Method method) {
 		StringBuilder methodKeySb = new StringBuilder(beanName).append(".").append(method.getName());
 		for (Class<?> parameterType : method.getParameterTypes()) {
@@ -69,36 +79,20 @@ public class SpringCacheUtils implements ApplicationContextAware, BeanPostProces
 
 	public String generateCacheKey(String nameSpace, String name, ProceedingJoinPoint point) throws IOException, NoSuchMethodException {
 
-		Class<?> classTarget = point.getTarget().getClass();
-		String fullPathClassName = classTarget.getTypeName();
-		String methodName = point.getSignature().getName();
-		Object[] args = point.getArgs();
-
-		Class<?>[] parameterTypes = ((MethodSignature) point.getSignature()).getParameterTypes();
-		Method objMethod = classTarget.getMethod(methodName, parameterTypes);
-
-		Map<String, Object> cacheKeyMap = new HashMap<>();
-
-		String[] parameterNames = nameDiscoverer.getParameterNames(objMethod);
-
+		Object[] args = getArgs(point);
 		Object nameObject = null;
 		try {
 			Expression expression = parser.parseExpression(name);
-			EvaluationContext context = new StandardEvaluationContext();
-			for (int i = 0; i < args.length; i++) {
-				context.setVariable(parameterNames[i], args[i]);
-			}
-			nameObject = expression.getValue(context);
+			EvaluationContext evaluationContext = getEvaluationContext(point);
+			nameObject = expression.getValue(evaluationContext);
 		} catch (Exception e) {
-			log.info(fullPathClassName + "." + methodName + "的SpEL表达式转换异常", e);
+			log.info(getFullPathClassName(point) + "." + getMethodName(point) + "的SpEL表达式转换异常", e);
 		}
 
-		String cacheNameSpace = StringUtils.isBlank(nameSpace) ? fullPathClassName + "." + methodName : nameSpace;
+		String cacheNameSpace = StringUtils.isBlank(nameSpace) ? getFullPathClassName(point) + "." + getMethodName(point) : nameSpace;
 		Object cacheName = ObjectUtils.isEmpty(nameObject) ? args : nameObject;
-		cacheKeyMap.put("nameSpace", cacheNameSpace);
-		cacheKeyMap.put("name", cacheName);
 
-		return objectMapper.writeValueAsString(cacheKeyMap);
+		return String.format("nameSpace:%s:name:%s", cacheNameSpace, objectMapper.writeValueAsString(cacheName));
 	}
 
 	@SneakyThrows
@@ -108,6 +102,52 @@ public class SpringCacheUtils implements ApplicationContextAware, BeanPostProces
 		Method objMethod = point.getTarget().getClass().getMethod(methodName, parameterTypes);
 
 		return objMethod.getAnnotation(clazz);
+	}
+
+	public EvaluationContext getEvaluationContext(ProceedingJoinPoint point) {
+		EvaluationContext context = new StandardEvaluationContext();
+		Object[] args = getArgs(point);
+		String[] parameterNames = getParameterNames(point);
+		for (int i = 0; i < args.length; i++) {
+			context.setVariable(parameterNames[i], args[i]);
+		}
+		return context;
+	}
+
+	public Class<?> getClazz(ProceedingJoinPoint point) {
+
+		return point.getTarget().getClass();
+	}
+
+	public String getFullPathClassName(ProceedingJoinPoint point) {
+
+		return getClazz(point).getTypeName();
+	}
+
+	public String getMethodName(ProceedingJoinPoint point) {
+
+		return point.getSignature().getName();
+	}
+
+	public Object[] getArgs(ProceedingJoinPoint point) {
+
+		return point.getArgs();
+	}
+
+	public Class<?>[] getParameterTypes(ProceedingJoinPoint point) {
+
+		return ((MethodSignature) point.getSignature()).getParameterTypes();
+	}
+
+	@SneakyThrows
+	public Method getMethod(ProceedingJoinPoint point) {
+
+		return getClazz(point).getMethod(getMethodName(point), getParameterTypes(point));
+	}
+
+	public String[] getParameterNames(ProceedingJoinPoint point) {
+
+		return nameDiscoverer.getParameterNames(getMethod(point));
 	}
 
 }

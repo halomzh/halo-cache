@@ -53,6 +53,9 @@ public class CacheGetAspect {
 	public Object around(ProceedingJoinPoint point) throws Throwable {
 
 		CacheGet cacheGet = springCacheUtils.getAnnotation(point, CacheGet.class);
+		if (!springCacheUtils.checkCondition(cacheGet.condition(), point)) {
+			return point.proceed();
+		}
 		String cacheKey = springCacheUtils.generateCacheKey(cacheGet.nameSpace(), cacheGet.name(), point);
 		CacheHolder cacheHolder = redisCacheHandler.getCache(cacheKey);
 
@@ -60,13 +63,20 @@ public class CacheGetAspect {
 			return cacheHolder.getCacheValue();
 		}
 		if (CacheHolderStatusEnum.REFRESH.getValue() == cacheHolder.getCacheHolderStatus()) {
-			CacheHolder finalCacheHolder = cacheHolder;
 			refreshExecutorService.execute(() -> {
+				RLock rLock = redissonClient.getLock(cacheKey + ":lock");
 				try {
+					rLock.lock(5 * 60, TimeUnit.SECONDS);
+					CacheHolder cacheHolderTemp = redisCacheHandler.getCache(cacheKey);
+					if (CacheHolderStatusEnum.EFFECTIVE.getValue() == cacheHolderTemp.getCacheHolderStatus()) {
+						return;
+					}
 					Object value = point.proceed();
 					redisCacheHandler.putCache(cacheKey, value);
 				} catch (Throwable throwable) {
-					log.error("刷新失败: cacheHolder[{}], {}", finalCacheHolder, throwable);
+					log.error("刷新失败: cacheKey[{}], {}", cacheKey, throwable);
+				} finally {
+					rLock.unlock();
 				}
 			});
 		}
